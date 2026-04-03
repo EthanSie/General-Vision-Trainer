@@ -9,6 +9,15 @@ from tkinter import filedialog, messagebox, scrolledtext, ttk
 from vision_pipeline import PipelineError, TrainConfig, ValidateConfig, VisionPipeline
 
 
+YOLO_MODEL_OPTIONS = [
+    ("yolo11n.pt", "nano (fastest, lowest VRAM, good for CPU/basic GPU)"),
+    ("yolo11s.pt", "small (best general starting point, solid mid-range GPU)"),
+    ("yolo11m.pt", "medium (better accuracy, needs a solid GPU)"),
+    ("yolo11l.pt", "large (high accuracy, strong GPU recommended)"),
+    ("yolo11x.pt", "xlarge (highest accuracy, heavy VRAM use, high-end GPU)"),
+]
+
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -40,7 +49,8 @@ class App(tk.Tk):
 
         self.dataset_var = tk.StringVar()
         self.output_var = tk.StringVar(value=str(Path("runs_custom").resolve()))
-        self.base_model_var = tk.StringVar(value="yolo11n.pt")
+        self.base_model_var = tk.StringVar(value=YOLO_MODEL_OPTIONS[0][0])
+        self.base_model_display_var = tk.StringVar(value=self._format_model_option(YOLO_MODEL_OPTIONS[0]))
         self.epochs_var = tk.StringVar(value="50")
         self.imgsz_var = tk.StringVar(value="640")
         self.batch_var = tk.StringVar(value="16")
@@ -52,7 +62,7 @@ class App(tk.Tk):
         row = 0
         self._path_row(frame, row, "Dataset folder or ZIP", self.dataset_var, self._pick_dataset); row += 1
         self._path_row(frame, row, "Output directory", self.output_var, self._pick_output_dir, directory=True); row += 1
-        self._entry_row(frame, row, "Base model", self.base_model_var); row += 1
+        self._base_model_row(frame, row); row += 1
         self._entry_row(frame, row, "Epochs", self.epochs_var); row += 1
         self._entry_row(frame, row, "Image size", self.imgsz_var); row += 1
         self._entry_row(frame, row, "Batch size", self.batch_var); row += 1
@@ -129,6 +139,31 @@ class App(tk.Tk):
         ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", pady=6)
         ttk.Entry(parent, textvariable=variable).grid(row=row, column=1, sticky="ew", padx=(8, 8), pady=6)
 
+    def _format_model_option(self, option):
+        model_name, description = option
+        return f"{model_name} ({description})"
+
+    def _parse_model_option(self, value: str) -> str:
+        for model_name, _ in YOLO_MODEL_OPTIONS:
+            if value.startswith(model_name):
+                return model_name
+        return value.strip()
+
+    def _base_model_row(self, parent, row):
+        ttk.Label(parent, text="Base model").grid(row=row, column=0, sticky="w", pady=6)
+        model_values = [self._format_model_option(option) for option in YOLO_MODEL_OPTIONS]
+        combo = ttk.Combobox(
+            parent,
+            textvariable=self.base_model_display_var,
+            state="readonly",
+            values=model_values,
+        )
+        combo.grid(row=row, column=1, sticky="ew", padx=(8, 8), pady=6)
+        combo.bind("<<ComboboxSelected>>", self._on_model_selected)
+
+    def _on_model_selected(self, event=None):
+        self.base_model_var.set(self._parse_model_option(self.base_model_display_var.get()))
+
     def log(self, message: str):
         self.log_text.insert("end", message + "\n")
         self.log_text.see("end")
@@ -184,7 +219,7 @@ class App(tk.Tk):
             cfg = TrainConfig(
                 dataset_path=self.dataset_var.get().strip(),
                 output_dir=self.output_var.get().strip() or "runs_custom",
-                base_model=self.base_model_var.get().strip() or "yolo11n.pt",
+                base_model=self._parse_model_option(self.base_model_display_var.get()) or "yolo11n.pt",
                 epochs=int(self.epochs_var.get()),
                 imgsz=int(self.imgsz_var.get()),
                 batch=int(self.batch_var.get()),
